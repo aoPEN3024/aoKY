@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>電子KY 管理画面</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --navy:#1f3a5f; --head-bg:#e8eef5; --line:#333;
+    --s-bg:#e6f5e9; --s-fg:#1b7f3b;
+    --m-bg:#fff6e0; --m-fg:#b8860b;
+    --l-bg:#fde6e6; --l-fg:#c0392b;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;margin:0;background:#f0f2f5;color:#222;}
+  header{background:var(--navy);color:#fff;padding:12px 16px;font-size:18px;font-weight:bold;}
+  .tabs{display:flex;background:#2c4a72;}
+  .tabs button{flex:1;background:transparent;color:#cfe0f5;border:0;padding:12px;font-size:14px;font-weight:bold;cursor:pointer;border-bottom:3px solid transparent;}
+  .tabs button.active{color:#fff;border-bottom-color:#ffcf33;background:#1f3a5f;}
+  .wrap{max-width:900px;margin:18px auto;padding:0 14px;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .card{background:#fff;border-radius:10px;box-shadow:0 1px 6px #0001;padding:16px;margin-bottom:16px;}
+  h2{font-size:15px;margin:0 0 12px;color:var(--navy);border-left:4px solid var(--navy);padding-left:8px;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
+  input,select{font-family:inherit;font-size:14px;padding:8px;border:1px solid #bbb;border-radius:6px;}
+  input[type=text]{flex:1;min-width:160px;}
+  button.btn{background:var(--navy);color:#fff;border:0;border-radius:6px;padding:9px 16px;font-weight:bold;cursor:pointer;font-size:14px;}
+  button.btn.sub{background:#fff;color:var(--navy);border:1px solid var(--navy);}
+  button.btn.danger{background:#fff;color:#c0392b;border:1px solid #c0392b;padding:5px 10px;font-size:12px;}
+  table.list{width:100%;border-collapse:collapse;}
+  table.list th,table.list td{border-bottom:1px solid #e3e3e3;padding:8px 6px;font-size:13px;text-align:left;}
+  table.list th{background:#f5f7fa;color:#555;}
+  .muted{color:#888;font-size:13px;}
+  .qrbox{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;}
+  #qrcode{padding:10px;background:#fff;border:1px solid #ddd;}
+  .qrmeta{font-size:13px;}
+  .qrmeta .urlbox{word-break:break-all;background:#f5f7fa;padding:8px;border-radius:6px;margin-top:6px;font-size:12px;}
+  .overlay{display:none;position:fixed;inset:0;background:#0007;z-index:50;overflow:auto;padding:20px;}
+  .overlay.show{display:block;}
+  .sheetwrap{max-width:780px;margin:0 auto;}
+  .sheet{background:#fff;padding:14px;}
+  .sheet table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  .sheet td{border:1px solid var(--line);padding:5px 6px;vertical-align:middle;font-size:13px;}
+  .sheet .title{font-size:22px;font-weight:bold;text-align:center;letter-spacing:4px;}
+  .sheet .lbl{background:var(--head-bg);font-weight:bold;text-align:center;white-space:nowrap;}
+  .sheet .ctr{text-align:center;}
+  .sheet .secthead td{background:var(--head-bg);font-weight:bold;text-align:center;}
+  .risk{font-weight:bold;text-align:center;border-radius:4px;}
+  .risk.s{background:var(--s-bg);color:var(--s-fg);}
+  .risk.m{background:var(--m-bg);color:var(--m-fg);}
+  .risk.l{background:var(--l-bg);color:var(--l-fg);}
+  .ovbar{max-width:780px;margin:0 auto 10px;display:flex;gap:8px;}
+  .ovbar button{background:#fff;color:var(--navy);border:0;border-radius:6px;padding:8px 16px;font-weight:bold;cursor:pointer;}
+  @media print{
+    header,.tabs,.wrap,.ovbar{display:none!important;}
+    .overlay{position:static;background:#fff;padding:0;}
+    .overlay.show{display:block;}
+    .sheetwrap{max-width:none;}
+    .sheet{padding:0;}
+    @page{size:A4 portrait;margin:10mm;}
+    .sheet td{font-size:11px;}
+  }
+</style>
+</head>
+<body>
+<header>電子KY 管理画面</header>
+<div class="tabs">
+  <button id="t-master" class="active" onclick="showTab('master')">マスタ管理</button>
+  <button id="t-qr" onclick="showTab('qr')">QR発行</button>
+  <button id="t-records" onclick="showTab('records')">KY記録一覧</button>
+</div>
+
+<div class="wrap">
+  <div id="p-master" class="panel active">
+    <div class="card">
+      <h2>現場の登録</h2>
+      <div class="row">
+        <input type="text" id="newSite" placeholder="現場名（例：○○橋補修工事）">
+        <button class="btn" onclick="addSite()">登録</button>
+      </div>
+      <table class="list"><thead><tr><th>現場名</th><th style="width:90px"></th></tr></thead>
+        <tbody id="siteList"><tr><td colspan="2" class="muted">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>協力会社の登録</h2>
+      <div class="row">
+        <input type="text" id="newPartner" placeholder="会社名（例：△△塗装）">
+        <button class="btn" onclick="addPartner()">登録</button>
+      </div>
+      <table class="list"><thead><tr><th>会社名</th><th style="width:90px"></th></tr></thead>
+        <tbody id="partnerList"><tr><td colspan="2" class="muted">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="p-qr" class="panel">
+    <div class="card">
+      <h2>QRコード発行（現場 × 協力会社）</h2>
+      <div class="row">
+        <select id="qrSite"></select>
+        <select id="qrPartner"></select>
+        <button class="btn" onclick="genQR()">QR生成</button>
+        <button class="btn sub" onclick="window.print()">印刷</button>
+      </div>
+      <div class="qrbox">
+        <div id="qrcode"></div>
+        <div class="qrmeta" id="qrMeta"><span class="muted">現場と会社を選んで「QR生成」を押してください。</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="p-records" class="panel">
+    <div class="card">
+      <h2>KY記録一覧</h2>
+      <div class="row">
+        <select id="fSite"><option value="">現場（すべて）</option></select>
+        <select id="fPartner"><option value="">会社（すべて）</option></select>
+        <input type="date" id="fDate">
+        <button class="btn sub" onclick="loadRecords()">絞り込み</button>
+      </div>
+      <table class="list">
+        <thead><tr><th>日付</th><th>現場</th><th>会社</th><th>職長</th><th style="width:70px"></th></tr></thead>
+        <tbody id="recList"><tr><td colspan="5" class="muted">「絞り込み」を押すと表示されます。</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="ovbar">
+    <button onclick="window.print()">印刷 / PDF</button>
+    <button onclick="closeSheet()">閉じる</button>
+  </div>
+  <div class="sheetwrap"><div class="sheet" id="sheetArea"></div></div>
+</div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, query, where, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let sites = [], partners = [];
+
+function showTab(name){
+  ['master','qr','records'].forEach(n=>{
+    document.getElementById('p-'+n).classList.toggle('active', n===name);
+    document.getElementById('t-'+n).classList.toggle('active', n===name);
+  });
+}
+window.showTab = showTab;
+
+async function loadMasters(){
+  const [sSnap, pSnap] = await Promise.all([
+    getDocs(collection(db,'sites')),
+    getDocs(collection(db,'partners'))
+  ]);
+  sites = sSnap.docs.map(d=>({id:d.id, name:d.data().name||''}));
+  partners = pSnap.docs.map(d=>({id:d.id, name:d.data().name||''}));
+  renderMasterLists();
+  fillSelects();
+}
+
+function renderMasterLists(){
+  const sl = document.getElementById('siteList');
+  sl.innerHTML = sites.length ? '' : '<tr><td colspan="2" class="muted">未登録</td></tr>';
+  sites.forEach(s=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = '<td>'+esc(s.name)+'</td><td><button class="btn danger" data-id="'+s.id+'" data-kind="sites">削除</button></td>';
+    sl.appendChild(tr);
+  });
+  const pl = document.getElementById('partnerList');
+  pl.innerHTML = partners.length ? '' : '<tr><td colspan="2" class="muted">未登録</td></tr>';
+  partners.forEach(p=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = '<td>'+esc(p.name)+'</td><td><button class="btn danger" data-id="'+p.id+'" data-kind="partners">削除</button></td>';
+    pl.appendChild(tr);
+  });
+  document.querySelectorAll('button.danger').forEach(b=>{
+    b.onclick = ()=> delMaster(b.getAttribute('data-kind'), b.getAttribute('data-id'));
+  });
+}
+
+function fillSelects(){
+  const opt = (arr,ph)=> '<option value="">'+ph+'</option>' +
+    arr.map(x=>'<option value="'+x.id+'">'+esc(x.name)+'</option>').join('');
+  document.getElementById('qrSite').innerHTML = opt(sites,'現場を選択');
+  document.getElementById('qrPartner').innerHTML = opt(partners,'会社を選択');
+  document.getElementById('fSite').innerHTML = '<option value="">現場（すべて）</option>' +
+    sites.map(x=>'<option value="'+x.id+'">'+esc(x.name)+'</option>').join('');
+  document.getElementById('fPartner').innerHTML = '<option value="">会社（すべて）</option>' +
+    partners.map(x=>'<option value="'+x.id+'">'+esc(x.name)+'</option>').join('');
+}
+
+async function addSite(){
+  const v = document.getElementById('newSite').value.trim();
+  if(!v) return;
+  await addDoc(collection(db,'sites'), {name:v, createdAt:serverTimestamp()});
+  document.getElementById('newSite').value='';
+  loadMasters();
+}
+async function addPartner(){
+  const v = document.getElementById('newPartner').value.trim();
+  if(!v) return;
+  await addDoc(collection(db,'partners'), {name:v, createdAt:serverTimestamp()});
+  document.getElementById('newPartner').value='';
+  loadMasters();
+}
+async function delMaster(kind, id){
+  if(!confirm('削除しますか？')) return;
+  await deleteDoc(doc(db, kind, id));
+  loadMasters();
+}
+window.addSite=addSite; window.addPartner=addPartner;
+
+function genQR(){
+  const sId = document.getElementById('qrSite').value;
+  const pId = document.getElementById('qrPartner').value;
+  const meta = document.getElementById('qrMeta');
+  const box = document.getElementById('qrcode');
+  box.innerHTML='';
+  if(!sId || !pId){ meta.innerHTML='<span class="muted">現場と会社を選択してください。</span>'; return; }
+  const s = sites.find(x=>x.id===sId), p = partners.find(x=>x.id===pId);
+  const url = new URL('ky.html', location.href).href + '?s='+sId+'&p='+pId;
+  new QRCode(box, { text:url, width:200, height:200 });
+  meta.innerHTML =
+    '<div><b>現場：</b>'+esc(s.name)+'</div>'+
+    '<div><b>会社：</b>'+esc(p.name)+'</div>'+
+    '<div class="urlbox">'+esc(url)+'</div>'+
+    '<div class="muted" style="margin-top:6px">このQRを印刷して現場に掲示／配布してください。</div>';
+}
+window.genQR=genQR;
+
+async function loadRecords(){
+  const tb = document.getElementById('recList');
+  tb.innerHTML = '<tr><td colspan="5" class="muted">読み込み中…</td></tr>';
+  const conds = [];
+  const sId=document.getElementById('fSite').value;
+  const pId=document.getElementById('fPartner').value;
+  const dt=document.getElementById('fDate').value;
+  if(sId) conds.push(where('siteId','==',sId));
+  if(pId) conds.push(where('partnerId','==',pId));
+  if(dt) conds.push(where('date','==',dt));
+  let snap;
+  try{
+    snap = await getDocs(query(collection(db,'ky'), ...conds));
+  }catch(e){
+    tb.innerHTML='<tr><td colspan="5" class="muted">読み込みエラー：'+esc(e.message)+'</td></tr>';
+    return;
+  }
+  const rows = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  rows.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="5" class="muted">該当なし</td></tr>'; return; }
+  tb.innerHTML='';
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML =
+      '<td>'+esc(r.date||'')+'</td><td>'+esc(r.siteName||'')+'</td>'+
+      '<td>'+esc(r.partnerName||'')+'</td><td>'+esc(r.foreman||'')+'</td>'+
+      '<td><button class="btn sub" style="padding:5px 10px;font-size:12px">開く</button></td>';
+    tr.querySelector('button').onclick=()=>openSheet(r);
+    tb.appendChild(tr);
+  });
+}
+window.loadRecords=loadRecords;
+function riskClass(v){ return v<=2?'s':(v<=4?'m':'l'); }
+function riskLabel(v){ return v<=2?'小':(v<=4?'中':'大'); }
+function riskCell(v){ return v? '<td class="risk '+riskClass(v)+'">'+riskLabel(v)+'（'+v+'）</td>' : '<td></td>'; }
+
+function openSheet(r){
+  const hz = r.hazards||[];
+  let hazRows='', msRows='';
+  hz.forEach((h,i)=>{
+    const n=i+1;
+    hazRows += '<tr><td class="ctr">'+n+'</td><td colspan="4">'+esc(h.hazard||'')+'</td>'+
+      '<td class="ctr">'+(h.p1||'')+'</td><td class="ctr">'+(h.s1||'')+'</td>'+riskCell(h.risk1)+'</tr>';
+    msRows += '<tr><td class="ctr">'+n+'</td><td colspan="4">'+esc(h.measure||'')+'</td>'+
+      '<td class="ctr">'+(h.p2||'')+'</td><td class="ctr">'+(h.s2||'')+'</td>'+riskCell(h.risk2)+'</tr>';
+  });
+  if(!hz.length){ hazRows='<tr><td colspan="8" class="ctr muted">―</td></tr>'; msRows=hazRows; }
+
+  document.getElementById('sheetArea').innerHTML =
+   '<table>'+
+   '<colgroup><col style="width:12%"><col style="width:10%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:13%"></colgroup>'+
+   '<tr style="height:42px"><td colspan="3" class="title">危険予知活動表</td>'+
+     '<td class="lbl">日付</td><td colspan="2" class="ctr">'+esc(r.date||'')+'</td>'+
+     '<td class="lbl">天候</td><td class="ctr">'+esc(r.weather||'')+'</td></tr>'+
+   '<tr style="height:32px"><td class="lbl">現場名</td><td colspan="7">'+esc(r.siteName||'')+'</td></tr>'+
+   '<tr style="height:32px"><td class="lbl">会社名</td><td colspan="4">'+esc(r.partnerName||'')+'</td>'+
+     '<td class="lbl">職長</td><td colspan="2">'+esc(r.foreman||'')+'</td></tr>'+
+   '<tr><td class="lbl">作業内容</td><td colspan="7">'+esc(r.work||'').replace(/\n/g,'<br>')+'</td></tr>'+
+   '<tr class="secthead"><td>No</td><td colspan="4">起りうる危険</td><td>可能性</td><td>重大性</td><td>リスク</td></tr>'+
+   hazRows+
+   '<tr class="secthead"><td>No</td><td colspan="4">だから私たちはこうする（対策）</td><td>可能性</td><td>重大性</td><td>リスク（再評価）</td></tr>'+
+   msRows+
+   '<tr><td class="lbl">一言<br>安全宣言</td><td colspan="7">'+esc(r.slogan||'')+'</td></tr>'+
+   '<tr><td class="lbl">参加者名</td><td colspan="7">'+esc(r.members||'').replace(/\n/g,'　')+'</td></tr>'+
+   '<tr style="height:30px"><td class="lbl">合計</td><td class="ctr">'+esc(r.total||'')+'</td>'+
+     '<td class="lbl" style="background:transparent;text-align:left">名</td>'+
+     '<td colspan="2" class="lbl">元請確認欄</td><td colspan="3"></td></tr>'+
+   '</table>';
+  document.getElementById('overlay').classList.add('show');
+  window.scrollTo(0,0);
+}
+function closeSheet(){ document.getElementById('overlay').classList.remove('show'); }
+window.closeSheet=closeSheet;
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+loadMasters();
+</script>
+</body>
+</html>
