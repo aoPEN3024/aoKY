@@ -274,15 +274,17 @@ function riskCell(v){ return v? '<td class="risk '+riskClass(v)+'">'+riskLabel(v
 
 function openSheet(r){
   const hz = r.hazards||[];
+  const MINROWS = 4;                       // Excel用紙と同じく最低4行は枠を残す
+  const rowCount = Math.max(hz.length, MINROWS);
   let hazRows='', msRows='';
-  hz.forEach((h,i)=>{
-    const n=i+1;
-    hazRows += '<tr><td class="ctr">'+n+'</td><td colspan="4">'+esc(h.hazard||'')+'</td>'+
+  for(let i=0;i<rowCount;i++){
+    const h = hz[i] || {};                 // 無い行は空オブジェクト＝空欄の枠
+    const n = i+1;
+    hazRows += '<tr style="height:34px"><td class="ctr">'+n+'</td><td colspan="4">'+esc(h.hazard||'')+'</td>'+
       '<td class="ctr">'+(h.p1||'')+'</td><td class="ctr">'+(h.s1||'')+'</td>'+riskCell(h.risk1)+'</tr>';
-    msRows += '<tr><td class="ctr">'+n+'</td><td colspan="4">'+esc(h.measure||'')+'</td>'+
+    msRows += '<tr style="height:34px"><td class="ctr">'+n+'</td><td colspan="4">'+esc(h.measure||'')+'</td>'+
       '<td class="ctr">'+(h.p2||'')+'</td><td class="ctr">'+(h.s2||'')+'</td>'+riskCell(h.risk2)+'</tr>';
-  });
-  if(!hz.length){ hazRows='<tr><td colspan="8" class="ctr muted">―</td></tr>'; msRows=hazRows; }
+  }
 
   document.getElementById('sheetArea').innerHTML =
    '<table>'+
