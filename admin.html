@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>電子KY 管理画面</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
     --navy:#1f3a5f; --head-bg:#e8eef5; --line:#333;
@@ -41,6 +43,8 @@
   .overlay.show{display:block;}
   .sheetwrap{max-width:780px;margin:0 auto;}
   .sheet{background:#fff;padding:14px;}
+  .sheet.a4{width:210mm;min-height:297mm;padding:10mm;margin:0 auto;}
+  .sheet.a4 table{height:277mm;}
   .sheet table{width:100%;border-collapse:collapse;table-layout:fixed;border:2.5px solid #000;}
   .sheet td{border:1px solid #555;padding:5px 6px;vertical-align:middle;font-size:13px;}
   .sheet .title{font-size:22px;font-weight:bold;text-align:center;letter-spacing:4px;}
@@ -127,6 +131,7 @@
         <select id="fPartner"><option value="">会社（すべて）</option></select>
         <input type="date" id="fDate">
         <button class="btn sub" onclick="loadRecords()">絞り込み</button>
+        <button class="btn" id="bulkPdfBtn" onclick="bulkPdf()" style="display:none">一括PDFダウンロード</button>
       </div>
       <table class="list">
         <thead><tr><th>日付</th><th>現場</th><th>会社</th><th>職長</th><th style="width:70px"></th></tr></thead>
@@ -141,7 +146,7 @@
     <button onclick="window.print()">印刷 / PDF</button>
     <button onclick="closeSheet()">閉じる</button>
   </div>
-  <div class="sheetwrap"><div class="sheet" id="sheetArea"></div></div>
+  <div class="sheetwrap"><div class="sheet a4" id="sheetArea"></div></div>
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -153,6 +158,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 let sites = [], partners = [];
+let currentRows = [];   // 直近の絞り込み結果（一括PDF用）
 
 function showTab(name){
   ['master','qr','records'].forEach(n=>{
@@ -262,6 +268,9 @@ async function loadRecords(){
   }
   const rows = snap.docs.map(d=>({id:d.id, ...d.data()}));
   rows.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  currentRows = rows;
+  const pdfBtn = document.getElementById('bulkPdfBtn');
+  if(pdfBtn) pdfBtn.style.display = rows.length ? 'inline-block' : 'none';
   if(!rows.length){ tb.innerHTML='<tr><td colspan="5" class="muted">該当なし</td></tr>'; return; }
   tb.innerHTML='';
   rows.forEach(r=>{
@@ -279,46 +288,87 @@ function riskClass(v){ return v<=2?'s':(v<=4?'m':'l'); }
 function riskLabel(v){ return v<=2?'小':(v<=4?'中':'大'); }
 function riskCell(v){ return v? '<td class="risk '+riskClass(v)+'">'+riskLabel(v)+'（'+v+'）</td>' : '<td></td>'; }
 
-function openSheet(r){
+function buildSheet(r){
   const hz = r.hazards||[];
   const MINROWS = 4;                       // Excel用紙と同じく最低4行は枠を残す
   const rowCount = Math.max(hz.length, MINROWS);
   let hazRows='', msRows='';
   for(let i=0;i<rowCount;i++){
     const h = hz[i] || {};                 // 無い行は空オブジェクト＝空欄の枠
-    hazRows += '<tr style="height:44px"><td colspan="5">'+esc(h.hazard||'')+'</td>'+
+    hazRows += '<tr style="height:60px"><td colspan="5">'+esc(h.hazard||'')+'</td>'+
       '<td class="ctr">'+(h.p1||'')+'</td><td class="ctr">'+(h.s1||'')+'</td>'+riskCell(h.risk1)+'</tr>';
-    msRows += '<tr style="height:44px"><td colspan="5">'+esc(h.measure||'')+'</td>'+
+    msRows += '<tr style="height:60px"><td colspan="5">'+esc(h.measure||'')+'</td>'+
       '<td class="ctr">'+(h.p2||'')+'</td><td class="ctr">'+(h.s2||'')+'</td>'+riskCell(h.risk2)+'</tr>';
   }
-
-  document.getElementById('sheetArea').innerHTML =
-   '<table>'+
+  return '<table>'+
    '<colgroup><col style="width:13%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:9%"><col style="width:9%"><col style="width:13%"></colgroup>'+
-   '<tr style="height:46px"><td colspan="3" class="title">危険予知活動表</td>'+
+   '<tr style="height:48px"><td colspan="3" class="title">危険予知活動表</td>'+
      '<td class="lbl">日付</td><td colspan="2" class="ctr">'+esc(r.date||'')+'</td>'+
      '<td class="lbl">天候</td><td class="ctr">'+esc(r.weather||'')+'</td></tr>'+
-   '<tr style="height:32px"><td class="lbl">現場名</td><td colspan="7">'+esc(r.siteName||'')+'</td></tr>'+
-   '<tr style="height:32px"><td class="lbl">会社名</td><td colspan="4">'+esc(r.partnerName||'')+'</td>'+
+   '<tr style="height:34px"><td class="lbl">現場名</td><td colspan="7">'+esc(r.siteName||'')+'</td></tr>'+
+   '<tr style="height:34px"><td class="lbl">会社名</td><td colspan="4">'+esc(r.partnerName||'')+'</td>'+
      '<td class="lbl">職長</td><td colspan="2">'+esc(r.foreman||'')+'</td></tr>'+
-   '<tr style="height:40px"><td class="lbl">作業内容</td><td colspan="7">'+esc(r.work||'').replace(/\n/g,'<br>')+'</td></tr>'+
-   '<tr class="head-haz"><td colspan="5">起りうる危険</td>'+
+   '<tr style="height:44px"><td class="lbl">作業内容</td><td colspan="7">'+esc(r.work||'').replace(/\n/g,'<br>')+'</td></tr>'+
+   '<tr class="head-haz" style="height:30px"><td colspan="5">起りうる危険</td>'+
      '<td class="subcol">可能性</td><td class="subcol">重大性</td><td class="subcol">リスク</td></tr>'+
    hazRows+
-   '<tr class="head-ms"><td colspan="5">だから私たちはこうする（対策）</td>'+
+   '<tr class="head-ms" style="height:30px"><td colspan="5">だから私たちはこうする（対策）</td>'+
      '<td class="subcol">可能性</td><td class="subcol">重大性</td><td class="subcol">リスク</td></tr>'+
    msRows+
-   '<tr style="height:40px"><td class="lbl">一言安全宣言</td><td colspan="7">'+esc(r.slogan||'')+'</td></tr>'+
-   '<tr style="height:40px"><td class="lbl">参加者名</td><td colspan="7">'+esc(r.members||'').replace(/\n/g,'　')+'</td></tr>'+
-   '<tr style="height:36px"><td class="lbl">合計</td><td class="ctr">'+esc(r.total||'')+'</td>'+
+   '<tr style="height:48px"><td class="lbl">一言安全宣言</td><td colspan="7">'+esc(r.slogan||'')+'</td></tr>'+
+   '<tr style="height:48px"><td class="lbl">参加者名</td><td colspan="7">'+esc(r.members||'').replace(/\n/g,'　')+'</td></tr>'+
+   '<tr style="height:40px"><td class="lbl">合計</td><td class="ctr">'+esc(r.total||'')+'</td>'+
      '<td class="ctr">名</td>'+
      '<td colspan="2" class="lbl">元請確認欄</td><td colspan="3"></td></tr>'+
    '</table>';
+}
+function openSheet(r){
+  document.getElementById('sheetArea').innerHTML = buildSheet(r);
   document.getElementById('overlay').classList.add('show');
   window.scrollTo(0,0);
 }
 function closeSheet(){ document.getElementById('overlay').classList.remove('show'); }
 window.closeSheet=closeSheet;
+
+// 絞り込み結果を1件1ページのPDFに連結してダウンロード
+async function bulkPdf(){
+  if(!currentRows.length){ alert('対象がありません。先に絞り込みしてください。'); return; }
+  const btn = document.getElementById('bulkPdfBtn');
+  const orig = btn.textContent;
+  btn.disabled = true;
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF('p','mm','a4');     // A4縦
+  const W = 210, H = 297;
+
+  // 画面外に描画用の用紙コンテナを置く
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;';
+  const sheet = document.createElement('div');
+  sheet.className = 'sheet a4';
+  stage.appendChild(sheet);
+  document.body.appendChild(stage);
+
+  try{
+    for(let i=0;i<currentRows.length;i++){
+      btn.textContent = '生成中… '+(i+1)+'/'+currentRows.length;
+      sheet.innerHTML = buildSheet(currentRows[i]);
+      const canvas = await html2canvas(sheet, { scale:2, backgroundColor:'#ffffff' });
+      const img = canvas.toDataURL('image/jpeg', 0.92);
+      if(i>0) pdf.addPage();
+      pdf.addImage(img, 'JPEG', 0, 0, W, H);   // A4全面に貼る
+    }
+    const today = new Date().toISOString().slice(0,10);
+    pdf.save('KY記録_'+today+'.pdf');
+  }catch(e){
+    alert('PDF生成エラー：'+e.message);
+  }finally{
+    document.body.removeChild(stage);
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+window.bulkPdf = bulkPdf;
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
