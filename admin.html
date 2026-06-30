@@ -41,12 +41,18 @@
   .overlay.show{display:block;}
   .sheetwrap{max-width:780px;margin:0 auto;}
   .sheet{background:#fff;padding:14px;}
-  .sheet table{width:100%;border-collapse:collapse;table-layout:fixed;}
-  .sheet td{border:1px solid var(--line);padding:5px 6px;vertical-align:middle;font-size:13px;}
+  .sheet table{width:100%;border-collapse:collapse;table-layout:fixed;border:2.5px solid #000;}
+  .sheet td{border:1px solid #555;padding:5px 6px;vertical-align:middle;font-size:13px;}
   .sheet .title{font-size:22px;font-weight:bold;text-align:center;letter-spacing:4px;}
-  .sheet .lbl{background:var(--head-bg);font-weight:bold;text-align:center;white-space:nowrap;}
+  .sheet .lbl{background:#dbe5f1;font-weight:bold;text-align:center;white-space:nowrap;}
   .sheet .ctr{text-align:center;}
-  .sheet .secthead td{background:var(--head-bg);font-weight:bold;text-align:center;}
+  /* 赤帯（起りうる危険） */
+  .sheet .head-haz td{background:#e8000d;color:#fff;font-weight:bold;text-align:center;font-size:15px;border-color:#c0000a;}
+  .sheet .head-haz .subcol{font-size:12px;}
+  /* 青帯（対策） */
+  .sheet .head-ms td{background:#3b6fc4;color:#fff;font-weight:bold;text-align:center;font-size:15px;border-color:#2f5aa0;}
+  .sheet .head-ms .subcol{font-size:12px;}
+  .sheet .secthead td{background:#dbe5f1;font-weight:bold;text-align:center;}
   .risk{font-weight:bold;text-align:center;border-radius:4px;}
   .risk.s{background:var(--s-bg);color:var(--s-fg);}
   .risk.m{background:var(--m-bg);color:var(--m-fg);}
@@ -61,6 +67,7 @@
     .sheet{padding:0;}
     @page{size:A4 portrait;margin:10mm;}
     .sheet td{font-size:11px;}
+    .sheet *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
 </style>
 </head>
@@ -279,31 +286,32 @@ function openSheet(r){
   let hazRows='', msRows='';
   for(let i=0;i<rowCount;i++){
     const h = hz[i] || {};                 // 無い行は空オブジェクト＝空欄の枠
-    const n = i+1;
-    hazRows += '<tr style="height:34px"><td class="ctr">'+n+'</td><td colspan="4">'+esc(h.hazard||'')+'</td>'+
+    hazRows += '<tr style="height:44px"><td colspan="5">'+esc(h.hazard||'')+'</td>'+
       '<td class="ctr">'+(h.p1||'')+'</td><td class="ctr">'+(h.s1||'')+'</td>'+riskCell(h.risk1)+'</tr>';
-    msRows += '<tr style="height:34px"><td class="ctr">'+n+'</td><td colspan="4">'+esc(h.measure||'')+'</td>'+
+    msRows += '<tr style="height:44px"><td colspan="5">'+esc(h.measure||'')+'</td>'+
       '<td class="ctr">'+(h.p2||'')+'</td><td class="ctr">'+(h.s2||'')+'</td>'+riskCell(h.risk2)+'</tr>';
   }
 
   document.getElementById('sheetArea').innerHTML =
    '<table>'+
-   '<colgroup><col style="width:12%"><col style="width:10%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:13%"></colgroup>'+
-   '<tr style="height:42px"><td colspan="3" class="title">危険予知活動表</td>'+
+   '<colgroup><col style="width:13%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:9%"><col style="width:9%"><col style="width:13%"></colgroup>'+
+   '<tr style="height:46px"><td colspan="3" class="title">危険予知活動表</td>'+
      '<td class="lbl">日付</td><td colspan="2" class="ctr">'+esc(r.date||'')+'</td>'+
      '<td class="lbl">天候</td><td class="ctr">'+esc(r.weather||'')+'</td></tr>'+
    '<tr style="height:32px"><td class="lbl">現場名</td><td colspan="7">'+esc(r.siteName||'')+'</td></tr>'+
    '<tr style="height:32px"><td class="lbl">会社名</td><td colspan="4">'+esc(r.partnerName||'')+'</td>'+
      '<td class="lbl">職長</td><td colspan="2">'+esc(r.foreman||'')+'</td></tr>'+
-   '<tr><td class="lbl">作業内容</td><td colspan="7">'+esc(r.work||'').replace(/\n/g,'<br>')+'</td></tr>'+
-   '<tr class="secthead"><td>No</td><td colspan="4">起りうる危険</td><td>可能性</td><td>重大性</td><td>リスク</td></tr>'+
+   '<tr style="height:40px"><td class="lbl">作業内容</td><td colspan="7">'+esc(r.work||'').replace(/\n/g,'<br>')+'</td></tr>'+
+   '<tr class="head-haz"><td colspan="5">起りうる危険</td>'+
+     '<td class="subcol">可能性</td><td class="subcol">重大性</td><td class="subcol">リスク</td></tr>'+
    hazRows+
-   '<tr class="secthead"><td>No</td><td colspan="4">だから私たちはこうする（対策）</td><td>可能性</td><td>重大性</td><td>リスク（再評価）</td></tr>'+
+   '<tr class="head-ms"><td colspan="5">だから私たちはこうする（対策）</td>'+
+     '<td class="subcol">可能性</td><td class="subcol">重大性</td><td class="subcol">リスク</td></tr>'+
    msRows+
-   '<tr><td class="lbl">一言<br>安全宣言</td><td colspan="7">'+esc(r.slogan||'')+'</td></tr>'+
-   '<tr><td class="lbl">参加者名</td><td colspan="7">'+esc(r.members||'').replace(/\n/g,'　')+'</td></tr>'+
-   '<tr style="height:30px"><td class="lbl">合計</td><td class="ctr">'+esc(r.total||'')+'</td>'+
-     '<td class="lbl" style="background:transparent;text-align:left">名</td>'+
+   '<tr style="height:40px"><td class="lbl">一言安全宣言</td><td colspan="7">'+esc(r.slogan||'')+'</td></tr>'+
+   '<tr style="height:40px"><td class="lbl">参加者名</td><td colspan="7">'+esc(r.members||'').replace(/\n/g,'　')+'</td></tr>'+
+   '<tr style="height:36px"><td class="lbl">合計</td><td class="ctr">'+esc(r.total||'')+'</td>'+
+     '<td class="ctr">名</td>'+
      '<td colspan="2" class="lbl">元請確認欄</td><td colspan="3"></td></tr>'+
    '</table>';
   document.getElementById('overlay').classList.add('show');
