@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>危険予知活動表（入力）</title>
+<style>
+  :root{
+    --line:#333; --head-bg:#e8eef5;
+    --s-bg:#e6f5e9; --s-fg:#1b7f3b;
+    --m-bg:#fff6e0; --m-fg:#b8860b;
+    --l-bg:#fde6e6; --l-fg:#c0392b;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;margin:0;background:#f0f2f5;color:#222;}
+  .toolbar{position:sticky;top:0;z-index:10;background:#1f3a5f;color:#fff;padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .toolbar button{background:#fff;color:#1f3a5f;border:0;border-radius:6px;padding:9px 16px;font-weight:bold;cursor:pointer;font-size:14px;}
+  .toolbar button.ghost{background:transparent;color:#fff;border:1px solid #ffffff66;}
+  .toolbar button.send{background:#ffcf33;color:#1f3a5f;}
+  .toolbar button:disabled{opacity:.5;cursor:default;}
+  .toolbar .sp{flex:1;}
+  .banner{padding:8px 14px;font-size:13px;text-align:center;}
+  .banner.err{background:#fde6e6;color:#c0392b;}
+  .banner.ok{background:#e6f5e9;color:#1b7f3b;}
+  .banner.info{background:#fff6e0;color:#8a6d00;}
+  .sheet{background:#fff;max-width:760px;margin:16px auto;padding:14px;box-shadow:0 2px 10px #0002;}
+  table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  td,th{border:1px solid var(--line);padding:4px 6px;vertical-align:middle;font-size:13px;}
+  .title{font-size:22px;font-weight:bold;text-align:center;letter-spacing:4px;}
+  .lbl{background:var(--head-bg);font-weight:bold;text-align:center;white-space:nowrap;}
+  .fixed{background:#f5f7fa;font-weight:bold;}
+  input,select,textarea{width:100%;border:0;background:transparent;font-family:inherit;font-size:13px;padding:2px;resize:none;}
+  input:focus,select:focus,textarea:focus{outline:1px solid #6aa0ff;background:#f5f9ff;}
+  textarea{min-height:38px;line-height:1.4;}
+  .ctr{text-align:center;}
+  select.pm{text-align:center;}
+  .risk{font-weight:bold;text-align:center;border-radius:4px;}
+  .risk.s{background:var(--s-bg);color:var(--s-fg);}
+  .risk.m{background:var(--m-bg);color:var(--m-fg);}
+  .risk.l{background:var(--l-bg);color:var(--l-fg);}
+  .secthead td{background:var(--head-bg);font-weight:bold;text-align:center;}
+  .delbtn{cursor:pointer;color:#c0392b;font-weight:bold;text-align:center;user-select:none;margin-left:4px;}
+  .no{text-align:center;font-weight:bold;color:#555;}
+  @media print{
+    .toolbar,.delbtn,.banner{display:none!important;}
+    body{background:#fff;}
+    .sheet{box-shadow:none;margin:0;max-width:none;padding:0;}
+    input,select,textarea{outline:0!important;background:transparent!important;}
+    @page{size:A4 portrait;margin:10mm;}
+    td,th{font-size:11px;}
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button class="send" id="btnSend" onclick="submitKy()">送信</button>
+  <button class="ghost" onclick="window.print()">印刷 / PDF</button>
+  <button class="ghost" onclick="addRow()">＋ 危険・対策を追加</button>
+  <span class="sp"></span>
+  <span style="font-size:12px;opacity:.8;">小=1〜2 / 中=3〜4 / 大=6〜9</span>
+</div>
+<div class="banner info" id="banner">読み込み中…</div>
+
+<div class="sheet">
+  <table>
+    <colgroup>
+      <col style="width:12%"><col style="width:10%"><col style="width:13%">
+      <col style="width:13%"><col style="width:13%"><col style="width:13%">
+      <col style="width:13%"><col style="width:13%">
+    </colgroup>
+    <tbody>
+      <tr style="height:42px;">
+        <td colspan="3" class="title">危険予知活動表</td>
+        <td class="lbl">日付</td>
+        <td colspan="2"><input type="date" id="f_date"></td>
+        <td class="lbl">天候</td>
+        <td><input id="f_weather" placeholder="晴"></td>
+      </tr>
+      <tr style="height:34px;">
+        <td class="lbl">現場名</td>
+        <td colspan="7" class="fixed"><span id="f_site">―</span></td>
+      </tr>
+      <tr style="height:34px;">
+        <td class="lbl">会社名</td>
+        <td colspan="4" class="fixed"><span id="f_company">―</span></td>
+        <td class="lbl">職長</td>
+        <td colspan="2"><input id="f_foreman"></td>
+      </tr>
+      <tr>
+        <td class="lbl">作業内容</td>
+        <td colspan="7"><textarea id="f_work" placeholder="本日の作業内容"></textarea></td>
+      </tr>
+
+      <tr class="secthead">
+        <td>No</td>
+        <td colspan="4">起りうる危険</td>
+        <td>可能性</td><td>重大性</td><td>リスク</td>
+      </tr>
+      <tbody id="hazardBody"></tbody>
+
+      <tr class="secthead">
+        <td>No</td>
+        <td colspan="4">だから私たちはこうする（対策）</td>
+        <td>可能性</td><td>重大性</td><td>リスク（再評価）</td>
+      </tr>
+      <tbody id="measureBody"></tbody>
+
+      <tr>
+        <td class="lbl">一言<br>安全宣言</td>
+        <td colspan="7"><input id="f_slogan"></td>
+      </tr>
+      <tr>
+        <td class="lbl">参加者名</td>
+        <td colspan="7"><textarea id="f_members" placeholder="読点(、)や改行で区切ると人数を自動計算" oninput="countMembers()"></textarea></td>
+      </tr>
+      <tr style="height:30px;">
+        <td class="lbl">合計</td>
+        <td class="ctr"><input id="f_total" class="ctr" style="text-align:center"></td>
+        <td class="lbl" style="background:transparent;text-align:left;">名</td>
+        <td colspan="2" class="lbl">元請確認欄</td>
+        <td colspan="3"></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, collection, addDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const params = new URLSearchParams(location.search);
+const siteId = params.get('s');
+const partnerId = params.get('p');
+let siteName = '', partnerName = '';
+
+function banner(msg, cls){
+  const b = document.getElementById('banner');
+  b.textContent = msg; b.className = 'banner ' + (cls||'info');
+}
+
+async function loadMaster(){
+  if(!siteId || !partnerId){
+    banner('QRコードから開いてください（現場・会社の情報がありません）', 'err');
+    document.getElementById('btnSend').disabled = true;
+    return;
+  }
+  try{
+    const [sSnap, pSnap] = await Promise.all([
+      getDoc(doc(db, 'sites', siteId)),
+      getDoc(doc(db, 'partners', partnerId))
+    ]);
+    if(!sSnap.exists() || !pSnap.exists()){
+      banner('該当する現場・会社が見つかりません。管理者へ連絡してください。', 'err');
+      document.getElementById('btnSend').disabled = true;
+      return;
+    }
+    siteName = sSnap.data().name || '';
+    partnerName = pSnap.data().name || '';
+    document.getElementById('f_site').textContent = siteName;
+    document.getElementById('f_company').textContent = partnerName;
+    banner(siteName + '／' + partnerName + '　— 入力して送信してください', 'info');
+  }catch(e){
+    banner('読み込みエラー：' + e.message, 'err');
+    document.getElementById('btnSend').disabled = true;
+  }
+}
+
+let rowSeq = 0;
+function riskClass(v){ return v<=2 ? 's' : (v<=4 ? 'm' : 'l'); }
+function riskLabel(v){ return v<=2 ? '小' : (v<=4 ? '中' : '大'); }
+function pmSelect(cls){
+  let s = '<select class="pm '+cls+'" onchange="window.recalc()"><option value=""></option>';
+  for(let i=1;i<=3;i++) s += '<option value="'+i+'">'+i+'</option>';
+  return s + '</select>';
+}
+function addRow(){
+  rowSeq++; const id = rowSeq;
+  const hr = document.createElement('tr');
+  hr.setAttribute('data-id', id);
+  hr.innerHTML =
+    '<td class="no"><span class="rowno"></span>'
+      + '<span class="delbtn" onclick="window.delRow('+id+')" title="削除">×</span></td>'
+    + '<td colspan="4"><textarea class="hz" placeholder="どの作業で／どんな危険"></textarea></td>'
+    + '<td>'+pmSelect('p1')+'</td><td>'+pmSelect('s1')+'</td><td class="risk r1"></td>';
+  document.getElementById('hazardBody').appendChild(hr);
+
+  const mr = document.createElement('tr');
+  mr.setAttribute('data-id', id);
+  mr.innerHTML =
+    '<td class="no"><span class="rowno"></span></td>'
+    + '<td colspan="4"><textarea class="ms" placeholder="どう対策するか"></textarea></td>'
+    + '<td>'+pmSelect('p2')+'</td><td>'+pmSelect('s2')+'</td><td class="risk r2"></td>';
+  document.getElementById('measureBody').appendChild(mr);
+  renumber();
+}
+function delRow(id){
+  document.querySelectorAll('tr[data-id="'+id+'"]').forEach(r => r.parentNode.removeChild(r));
+  renumber();
+}
+function renumber(){
+  let n = 0;
+  document.getElementById('hazardBody').querySelectorAll('tr').forEach(hr => {
+    n++; const id = hr.getAttribute('data-id');
+    hr.querySelector('.rowno').textContent = n;
+    const mr = document.querySelector('#measureBody tr[data-id="'+id+'"]');
+    if(mr) mr.querySelector('.rowno').textContent = n;
+  });
+}
+function recalc(){
+  document.getElementById('hazardBody').querySelectorAll('tr').forEach(hr => {
+    const id = hr.getAttribute('data-id');
+    const mr = document.querySelector('#measureBody tr[data-id="'+id+'"]');
+    setRisk(hr.querySelector('.p1'), hr.querySelector('.s1'), hr.querySelector('.r1'));
+    if(mr) setRisk(mr.querySelector('.p2'), mr.querySelector('.s2'), mr.querySelector('.r2'));
+  });
+}
+function setRisk(pSel, sSel, cell){
+  const p = parseInt(pSel.value,10), s = parseInt(sSel.value,10);
+  cell.className = 'risk';
+  if(!p || !s){ cell.textContent=''; return; }
+  const v = p*s;
+  cell.textContent = riskLabel(v)+'（'+v+'）';
+  cell.classList.add(riskClass(v));
+}
+function countMembers(){
+  const t = document.getElementById('f_members').value;
+  const parts = t.split(/[、,\n]/).map(x=>x.trim()).filter(x=>x.length>0);
+  document.getElementById('f_total').value = parts.length || '';
+}
+function setToday(){
+  const d=new Date();
+  document.getElementById('f_date').value =
+    d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+async function submitKy(){
+  if(!siteId || !partnerId){ banner('現場・会社情報がないため送信できません', 'err'); return; }
+  const foreman = document.getElementById('f_foreman').value.trim();
+  if(!foreman){ banner('職長名を入力してください', 'err'); return; }
+
+  const hazards = [];
+  document.getElementById('hazardBody').querySelectorAll('tr').forEach(hr => {
+    const id = hr.getAttribute('data-id');
+    const mr = document.querySelector('#measureBody tr[data-id="'+id+'"]');
+    const hz = hr.querySelector('.hz').value.trim();
+    const ms = mr ? mr.querySelector('.ms').value.trim() : '';
+    const p1 = hr.querySelector('.p1').value, s1 = hr.querySelector('.s1').value;
+    const p2 = mr ? mr.querySelector('.p2').value : '', s2 = mr ? mr.querySelector('.s2').value : '';
+    if(hz || ms || p1 || s1 || p2 || s2){
+      hazards.push({
+        hazard: hz, measure: ms,
+        p1: p1?+p1:null, s1: s1?+s1:null, risk1: (p1&&s1)?(+p1)*(+s1):null,
+        p2: p2?+p2:null, s2: s2?+s2:null, risk2: (p2&&s2)?(+p2)*(+s2):null
+      });
+    }
+  });
+
+  const data = {
+    siteId, partnerId, siteName, partnerName,
+    date: document.getElementById('f_date').value,
+    weather: document.getElementById('f_weather').value.trim(),
+    foreman,
+    work: document.getElementById('f_work').value.trim(),
+    hazards,
+    slogan: document.getElementById('f_slogan').value.trim(),
+    members: document.getElementById('f_members').value.trim(),
+    total: document.getElementById('f_total').value,
+    createdAt: serverTimestamp()
+  };
+
+  const btn = document.getElementById('btnSend');
+  btn.disabled = true; banner('送信中…', 'info');
+  try{
+    await addDoc(collection(db, 'ky'), data);
+    banner('送信が完了しました。お疲れさまでした。', 'ok');
+  }catch(e){
+    banner('送信エラー：' + e.message, 'err');
+    btn.disabled = false;
+  }
+}
+
+window.addRow = addRow;
+window.delRow = delRow;
+window.recalc = recalc;
+window.countMembers = countMembers;
+window.submitKy = submitKy;
+
+setToday();
+for(let i=0;i<4;i++) addRow();
+loadMaster();
+</script>
+</body>
+</html>
