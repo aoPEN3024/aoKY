@@ -280,8 +280,12 @@ async function loadRecords(){
     tr.innerHTML =
       '<td>'+esc(r.date||'')+'</td><td>'+esc(r.siteName||'')+'</td>'+
       '<td>'+esc(r.partnerName||'')+'</td><td>'+esc(r.foreman||'')+'</td>'+
-      '<td><button class="btn sub" style="padding:5px 10px;font-size:12px">開く</button></td>';
-    tr.querySelector('button').onclick=()=>openSheet(r);
+      '<td style="white-space:nowrap">'+
+        '<button class="btn sub openBtn" style="padding:5px 10px;font-size:12px">開く</button> '+
+        '<button class="btn danger delBtn" style="padding:5px 10px;font-size:12px">削除</button>'+
+      '</td>';
+    tr.querySelector('.openBtn').onclick=()=>openSheet(r);
+    tr.querySelector('.delBtn').onclick=()=>delRecord(r);
     tb.appendChild(tr);
   });
 }
@@ -331,6 +335,15 @@ function openSheet(r){
 }
 function closeSheet(){ document.getElementById('overlay').classList.remove('show'); }
 window.closeSheet=closeSheet;
+
+async function delRecord(r){
+  if(!confirm('このKY記録を削除します。元に戻せません。よろしいですか？\n\n'+(r.date||'')+'  '+(r.siteName||'')+'  '+(r.partnerName||'')+'  '+(r.foreman||''))) return;
+  try{
+    await deleteDoc(doc(db,'ky',r.id));
+    loadRecords();
+  }catch(e){ alert('削除エラー：'+e.message); }
+}
+window.delRecord=delRecord;
 
 // 絞り込み結果を1件1ページのPDFに連結してダウンロード
 async function bulkPdf(){
