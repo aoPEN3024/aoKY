@@ -43,8 +43,28 @@
   .secthead td{background:var(--head-bg);font-weight:bold;text-align:center;}
   .delbtn{cursor:pointer;color:#c0392b;font-weight:bold;text-align:center;user-select:none;margin-left:4px;}
   .no{text-align:center;font-weight:bold;color:#555;}
+  /* サイン一覧 */
+  .signlist{display:flex;flex-direction:column;gap:6px;}
+  .signrow{display:flex;align-items:center;gap:10px;border:1px solid #ddd;border-radius:8px;padding:8px 10px;background:#fafbfc;}
+  .signrow .nm{flex:1;font-weight:bold;font-size:14px;}
+  .signrow .thumb{width:120px;height:40px;border:1px solid #ccc;border-radius:4px;background:#fff;object-fit:contain;}
+  .signrow .thumb.empty{display:flex;align-items:center;justify-content:center;color:#bbb;font-size:12px;}
+  .signrow button{background:#1f3a5f;color:#fff;border:0;border-radius:6px;padding:8px 14px;font-weight:bold;cursor:pointer;font-size:13px;white-space:nowrap;}
+  .signrow button.done{background:#fff;color:#1b7f3b;border:1px solid #1b7f3b;}
+  /* サインモーダル */
+  .sigmodal{display:none;position:fixed;inset:0;background:#0008;z-index:60;align-items:center;justify-content:center;padding:16px;}
+  .sigmodal.show{display:flex;}
+  .sigpanel{background:#fff;border-radius:12px;padding:16px;width:100%;max-width:440px;}
+  .sigpanel h3{margin:0 0 4px;font-size:16px;}
+  .sigpanel .hint{color:#888;font-size:12px;margin-bottom:10px;}
+  #sigCanvas{width:100%;height:220px;border:2px dashed #9ab;border-radius:8px;touch-action:none;background:#fff;display:block;}
+  .sigbtns{display:flex;gap:8px;margin-top:12px;}
+  .sigbtns button{flex:1;border:0;border-radius:8px;padding:12px;font-weight:bold;cursor:pointer;font-size:14px;}
+  .sigbtns .clear{background:#eee;color:#333;}
+  .sigbtns .cancel{background:#fff;color:#c0392b;border:1px solid #c0392b;}
+  .sigbtns .save{background:#ffcf33;color:#1f3a5f;}
   @media print{
-    .toolbar,.delbtn,.banner{display:none!important;}
+    .toolbar,.delbtn,.banner,.signlist-wrap,.sigmodal{display:none!important;}
     body{background:#fff;}
     .sheet{box-shadow:none;margin:0;max-width:none;padding:0;}
     input,select,textarea{outline:0!important;background:transparent!important;}
@@ -113,7 +133,7 @@
       </tr>
       <tr>
         <td class="lbl">参加者名</td>
-        <td colspan="7"><textarea id="f_members" placeholder="読点(、)や改行で区切ると人数を自動計算" oninput="countMembers()"></textarea></td>
+        <td colspan="7"><textarea id="f_members" placeholder="読点(、)や改行で区切って全員の名前を入力" oninput="onMembersInput()"></textarea></td>
       </tr>
       <tr style="height:30px;">
         <td class="lbl">合計</td>
@@ -126,9 +146,27 @@
   </table>
 </div>
 
+<div class="sheet signlist-wrap" id="signWrap" style="margin-top:14px;display:none;">
+  <div style="font-weight:bold;color:#1f3a5f;margin-bottom:8px;">参加者サイン（名前をタップして手書き）</div>
+  <div class="signlist" id="signList"></div>
+</div>
+
+<div class="sigmodal" id="sigModal">
+  <div class="sigpanel">
+    <h3 id="sigName">サイン</h3>
+    <div class="hint">枠内に指でサインしてください</div>
+    <canvas id="sigCanvas"></canvas>
+    <div class="sigbtns">
+      <button class="clear" onclick="sigClear()">消す</button>
+      <button class="cancel" onclick="sigCancel()">閉じる</button>
+      <button class="save" onclick="sigSave()">保存</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, getDoc, collection, addDoc, serverTimestamp }
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -166,10 +204,50 @@ async function loadMaster(){
     document.getElementById('f_site').textContent = siteName;
     document.getElementById('f_company').textContent = partnerName;
     banner(siteName + '／' + partnerName + '　— 入力して送信してください', 'info');
+    await loadExisting();
   }catch(e){
     banner('読み込みエラー：' + e.message, 'err');
     document.getElementById('btnSend').disabled = true;
   }
+}
+
+// 同じ現場×会社×本日のKYが既にあれば内容を復元（再送でデータが消えないように）
+async function loadExisting(){
+  const date = document.getElementById('f_date').value;
+  const kyId = siteId + '_' + partnerId + '_' + date;
+  let snap;
+  try{ snap = await getDoc(doc(db, 'ky', kyId)); }catch(e){ return; }
+  if(!snap.exists()) return;
+  const d = snap.data();
+  existingCreatedAt = d.createdAt || null;
+  document.getElementById('f_weather').value = d.weather || '';
+  document.getElementById('f_foreman').value = d.foreman || '';
+  document.getElementById('f_work').value = d.work || '';
+  document.getElementById('f_slogan').value = d.slogan || '';
+  document.getElementById('f_members').value = d.members || '';
+  signatures = d.signatures || {};
+  // 危険・対策の行を復元
+  const hz = d.hazards || [];
+  if(hz.length){
+    document.getElementById('hazardBody').innerHTML = '';
+    document.getElementById('measureBody').innerHTML = '';
+    rowSeq = 0;
+    hz.forEach(h=>{
+      addRow();
+      const hr = document.querySelector('#hazardBody tr:last-child');
+      const mr = document.querySelector('#measureBody tr:last-child');
+      hr.querySelector('.hz').value = h.hazard || '';
+      if(h.p1) hr.querySelector('.p1').value = h.p1;
+      if(h.s1) hr.querySelector('.s1').value = h.s1;
+      mr.querySelector('.ms').value = h.measure || '';
+      if(h.p2) mr.querySelector('.p2').value = h.p2;
+      if(h.s2) mr.querySelector('.s2').value = h.s2;
+    });
+    recalc();
+  }
+  countMembers();
+  renderSignList();
+  banner(siteName + '／' + partnerName + '　— 前回の入力を読み込みました。追記・サインできます', 'info');
 }
 
 let rowSeq = 0;
@@ -230,9 +308,126 @@ function setRisk(pSel, sSel, cell){
   cell.classList.add(riskClass(v));
 }
 function countMembers(){
-  const t = document.getElementById('f_members').value;
-  const parts = t.split(/[、,\n]/).map(x=>x.trim()).filter(x=>x.length>0);
+  const parts = parseMembers();
   document.getElementById('f_total').value = parts.length || '';
+}
+function parseMembers(){
+  const t = document.getElementById('f_members').value;
+  return t.split(/[、,\n]/).map(x=>x.trim()).filter(x=>x.length>0);
+}
+
+// 参加者名→サイン画像(dataURL) を保持
+let signatures = {};
+let existingCreatedAt = null;   // 既存KYの作成日時（上書き時に引き継ぐ）
+
+// サイン画像を軽量化（幅240px・白背景JPEG）してFirestore容量を抑える
+function shrinkSig(cv){
+  const tw = 240, th = Math.max(1, Math.round(tw * cv.height / cv.width));
+  const t = document.createElement('canvas'); t.width=tw; t.height=th;
+  const c = t.getContext('2d');
+  c.fillStyle = '#fff'; c.fillRect(0,0,tw,th);
+  c.drawImage(cv, 0, 0, tw, th);
+  return t.toDataURL('image/jpeg', 0.7);
+}
+
+function onMembersInput(){
+  countMembers();
+  renderSignList();
+}
+function renderSignList(){
+  const names = parseMembers();
+  // 現在の名前に無いサインは破棄（名前を消したら対応サインも消える）
+  Object.keys(signatures).forEach(k=>{ if(!names.includes(k)) delete signatures[k]; });
+  const wrap = document.getElementById('signWrap');
+  const list = document.getElementById('signList');
+  if(!names.length){ wrap.style.display='none'; list.innerHTML=''; return; }
+  wrap.style.display='block';
+  list.innerHTML='';
+  names.forEach(name=>{
+    const row = document.createElement('div');
+    row.className='signrow';
+    const has = !!signatures[name];
+    row.innerHTML =
+      '<span class="nm">'+escHtml(name)+'</span>'+
+      (has ? '<img class="thumb" src="'+signatures[name]+'">'
+           : '<span class="thumb empty">未サイン</span>')+
+      '<button class="'+(has?'done':'')+'">'+(has?'サイン済 ✎':'サインする')+'</button>';
+    row.querySelector('button').onclick=()=>openSig(name);
+    list.appendChild(row);
+  });
+}
+function escHtml(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// ---- サインcanvas ----
+let sigCtx=null, sigDrawing=false, sigTarget=null, sigDirty=false;
+function openSig(name){
+  sigTarget = name;
+  sigDirty = false;
+  document.getElementById('sigName').textContent = name + ' さんのサイン';
+  document.getElementById('sigModal').classList.add('show');
+  const cv = document.getElementById('sigCanvas');
+  // 実ピクセルを表示サイズに合わせる（高精細）
+  const rect = cv.getBoundingClientRect();
+  const dpr = window.devicePixelRatio||1;
+  cv.width = Math.round(rect.width*dpr);
+  cv.height = Math.round(rect.height*dpr);
+  sigCtx = cv.getContext('2d');
+  sigCtx.scale(dpr,dpr);
+  sigCtx.lineWidth = 2.5;
+  sigCtx.lineCap = 'round';
+  sigCtx.lineJoin = 'round';
+  sigCtx.strokeStyle = '#111';
+  sigCtx.clearRect(0,0,cv.width,cv.height);
+  // 既存サインがあれば下絵として表示
+  if(signatures[name]){
+    const img = new Image();
+    img.onload=()=>{ sigCtx.drawImage(img,0,0,rect.width,rect.height); };
+    img.src = signatures[name];
+  }
+}
+function sigPos(e){
+  const cv = document.getElementById('sigCanvas');
+  const rect = cv.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  return { x: p.clientX-rect.left, y: p.clientY-rect.top };
+}
+function sigStart(e){ e.preventDefault(); sigDrawing=true; const {x,y}=sigPos(e); sigCtx.beginPath(); sigCtx.moveTo(x,y); }
+function sigMove(e){ if(!sigDrawing) return; e.preventDefault(); const {x,y}=sigPos(e); sigCtx.lineTo(x,y); sigCtx.stroke(); sigDirty=true; }
+function sigEnd(e){ if(e) e.preventDefault(); sigDrawing=false; }
+function sigClear(){
+  const cv = document.getElementById('sigCanvas');
+  const dpr = window.devicePixelRatio||1;
+  sigCtx.clearRect(0,0,cv.width/dpr,cv.height/dpr);
+  sigDirty=true;
+}
+function sigCancel(){ document.getElementById('sigModal').classList.remove('show'); sigTarget=null; }
+function sigSave(){
+  const cv = document.getElementById('sigCanvas');
+  if(sigTarget){
+    if(isCanvasBlank(cv)){
+      delete signatures[sigTarget];        // 空なら未サインに戻す
+    }else{
+      signatures[sigTarget] = shrinkSig(cv);
+    }
+  }
+  document.getElementById('sigModal').classList.remove('show');
+  sigTarget=null;
+  renderSignList();
+}
+function isCanvasBlank(cv){
+  const ctx = cv.getContext('2d');
+  const d = ctx.getImageData(0,0,cv.width,cv.height).data;
+  for(let i=3;i<d.length;i+=4){ if(d[i]!==0) return false; }
+  return true;
+}
+function bindSigCanvas(){
+  const cv = document.getElementById('sigCanvas');
+  cv.addEventListener('mousedown', sigStart);
+  cv.addEventListener('mousemove', sigMove);
+  window.addEventListener('mouseup', sigEnd);
+  cv.addEventListener('touchstart', sigStart, {passive:false});
+  cv.addEventListener('touchmove', sigMove, {passive:false});
+  cv.addEventListener('touchend', sigEnd, {passive:false});
 }
 function setToday(){
   const d=new Date();
@@ -272,13 +467,17 @@ async function submitKy(){
     slogan: document.getElementById('f_slogan').value.trim(),
     members: document.getElementById('f_members').value.trim(),
     total: document.getElementById('f_total').value,
-    createdAt: serverTimestamp()
+    signatures,
+    createdAt: existingCreatedAt || serverTimestamp(),
+    updatedAt: serverTimestamp()
   };
 
+  const kyId = siteId + '_' + partnerId + '_' + data.date;   // 現場×会社×日付で1件
   const btn = document.getElementById('btnSend');
   btn.disabled = true; banner('送信中…', 'info');
   try{
-    await addDoc(collection(db, 'ky'), data);
+    await setDoc(doc(db, 'ky', kyId), data);   // 同じ日は上書き更新（重複しない）
+    existingCreatedAt = data.createdAt;
     banner('送信が完了しました。お疲れさまでした。', 'ok');
   }catch(e){
     banner('送信エラー：' + e.message, 'err');
@@ -290,10 +489,16 @@ window.addRow = addRow;
 window.delRow = delRow;
 window.recalc = recalc;
 window.countMembers = countMembers;
+window.onMembersInput = onMembersInput;
+window.openSig = openSig;
+window.sigClear = sigClear;
+window.sigCancel = sigCancel;
+window.sigSave = sigSave;
 window.submitKy = submitKy;
 
 setToday();
 for(let i=0;i<4;i++) addRow();
+bindSigCanvas();
 loadMaster();
 </script>
 </body>

@@ -306,6 +306,19 @@ function buildSheet(r){
     msRows += '<tr style="height:60px"><td colspan="5">'+esc(h.measure||'')+'</td>'+
       '<td class="ctr">'+(h.p2||'')+'</td><td class="ctr">'+(h.s2||'')+'</td>'+riskCell(h.risk2)+'</tr>';
   }
+  // 参加者名＋サイン欄
+  const sigs = r.signatures || {};
+  const names = String(r.members||'').split(/[、,\n]/).map(x=>x.trim()).filter(x=>x);
+  let membersCell;
+  if(names.length){
+    membersCell = '<div style="display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;">' +
+      names.map(nm=>{
+        const img = sigs[nm] ? '<img src="'+sigs[nm]+'" style="height:26px;vertical-align:middle;margin-left:4px;">' : '';
+        return '<span style="display:inline-flex;align-items:center;white-space:nowrap;">'+esc(nm)+img+'</span>';
+      }).join('') + '</div>';
+  }else{
+    membersCell = esc(r.members||'').replace(/\n/g,'　');
+  }
   return '<table>'+
    '<colgroup><col style="width:13%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:9%"><col style="width:9%"><col style="width:13%"></colgroup>'+
    '<tr style="height:48px"><td colspan="3" class="title">危険予知活動表</td>'+
@@ -322,7 +335,7 @@ function buildSheet(r){
      '<td class="subcol">可能性</td><td class="subcol">重大性</td><td class="subcol">リスク</td></tr>'+
    msRows+
    '<tr style="height:48px"><td class="lbl">一言安全宣言</td><td colspan="7">'+esc(r.slogan||'')+'</td></tr>'+
-   '<tr style="height:48px"><td class="lbl">参加者名</td><td colspan="7">'+esc(r.members||'').replace(/\n/g,'　')+'</td></tr>'+
+   '<tr style="height:56px"><td class="lbl">参加者名</td><td colspan="7">'+membersCell+'</td></tr>'+
    '<tr style="height:40px"><td class="lbl">合計</td><td class="ctr">'+esc(r.total||'')+'</td>'+
      '<td class="ctr">名</td>'+
      '<td colspan="2" class="lbl">元請確認欄</td><td colspan="3"></td></tr>'+
