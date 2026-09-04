@@ -75,6 +75,20 @@
     .sheet td{font-size:11px;}
     .sheet *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
+  /* QR発行タブから印刷するとき：QRと現場・会社名だけを出す */
+  @media print{
+    body.print-qr header,body.print-qr .tabs,body.print-qr .overlay{display:none!important;}
+    body.print-qr .wrap{display:block!important;}
+    body.print-qr #p-master,body.print-qr #p-records{display:none!important;}
+    body.print-qr #p-qr .row{display:none!important;}
+    body.print-qr #p-qr h2{display:none!important;}
+    body.print-qr #p-qr .card{box-shadow:none;border:0;}
+    body.print-qr .qrbox{justify-content:center;flex-direction:column;align-items:center;gap:16px;margin-top:30mm;}
+    body.print-qr #qrcode{padding:16px;border:1px solid #000;}
+    body.print-qr .qrmeta{font-size:18px;text-align:center;}
+    body.print-qr .qrmeta .urlbox{font-size:11px;color:#666;}
+    body.print-qr .qrmeta .muted{display:none;}
+  }
 </style>
 </head>
 <body>
@@ -116,7 +130,7 @@
         <select id="qrSite"></select>
         <select id="qrPartner"></select>
         <button class="btn" onclick="genQR()">QR生成</button>
-        <button class="btn sub" onclick="window.print()">印刷</button>
+        <button class="btn sub" onclick="printQR()">印刷</button>
       </div>
       <div class="qrbox">
         <div id="qrcode"></div>
@@ -250,6 +264,19 @@ function genQR(){
     '<div class="muted" style="margin-top:6px">このQRを印刷して現場に掲示／配布してください。</div>';
 }
 window.genQR=genQR;
+
+function printQR(){
+  if(!document.querySelector('#qrcode img, #qrcode canvas')){
+    alert('先に「QR生成」を押してQRコードを表示してください。');
+    return;
+  }
+  document.body.classList.add('print-qr');
+  const cleanup = ()=>{ document.body.classList.remove('print-qr'); window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  window.print();
+  setTimeout(cleanup, 1000);   // afterprintが来ない環境の保険
+}
+window.printQR=printQR;
 
 async function loadRecords(){
   const tb = document.getElementById('recList');
