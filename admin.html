@@ -65,6 +65,17 @@
   .risk.l{background:var(--l-bg);color:var(--l-fg);}
   .ovbar{max-width:780px;margin:0 auto 10px;display:flex;gap:8px;}
   .ovbar button{background:#fff;color:var(--navy);border:0;border-radius:6px;padding:8px 16px;font-weight:bold;cursor:pointer;}
+  .stampgrid{display:flex;flex-wrap:wrap;gap:12px;}
+  .stampcard{border:1px solid #ddd;border-radius:8px;padding:8px;width:140px;text-align:center;background:#fafbfc;}
+  .stampcard.sel{border:2px solid #1f3a5f;background:#eef3fa;}
+  .stampcard img{width:90px;height:90px;object-fit:contain;background:#fff;border:1px solid #eee;}
+  .stampcard .snm{font-size:13px;font-weight:bold;margin:6px 0;}
+  .stampcard button{font-size:12px;border:0;border-radius:5px;padding:5px 8px;cursor:pointer;margin:2px;}
+  .stampcard .use{background:#1f3a5f;color:#fff;}
+  .stampcard .use.sel{background:#1b7f3b;}
+  .stampcard .del{background:#fff;color:#c0392b;border:1px solid #c0392b;}
+  .stampbar{display:flex;align-items:center;gap:8px;font-size:13px;margin-left:auto;}
+  .stampbar img{height:30px;border:1px solid #ccc;background:#fff;}
   @media print{
     header,.tabs,.wrap,.ovbar{display:none!important;}
     .overlay{position:static;background:#fff;padding:0;margin:0;min-height:0;overflow:visible;}
@@ -98,6 +109,7 @@
   <button id="t-master" class="active" onclick="showTab('master')">マスタ管理</button>
   <button id="t-qr" onclick="showTab('qr')">QR発行</button>
   <button id="t-records" onclick="showTab('records')">KY記録一覧</button>
+  <button id="t-stamp" onclick="showTab('stamp')">印鑑</button>
 </div>
 
 <div class="wrap">
@@ -158,16 +170,31 @@
   </div>
 </div>
 
+  <div id="p-stamp" class="panel">
+    <div class="card">
+      <h2>印鑑の登録</h2>
+      <div class="row">
+        <input type="text" id="newStampName" placeholder="印鑑名（例：髙澤）">
+        <input type="file" id="newStampFile" accept="image/*">
+        <button class="btn" onclick="addStamp()">登録</button>
+      </div>
+      <div class="muted" id="stampMsg">画像（PNG推奨・背景透過可）を選んで登録してください。</div>
+      <div class="stampgrid" id="stampList" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
 <div class="overlay" id="overlay">
   <div class="ovbar">
     <button onclick="window.print()">印刷 / PDF</button>
+    <button onclick="stampRecord()">押印</button>
+    <button onclick="unstampRecord()">印鑑を消す</button>
     <button onclick="closeSheet()">閉じる</button>
   </div>
   <div class="sheetwrap"><div class="sheet a4" id="sheetArea"></div></div>
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, query, where, serverTimestamp }
+import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, where, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -178,10 +205,11 @@ let sites = [], partners = [];
 let currentRows = [];   // 直近の絞り込み結果（一括PDF用）
 
 function showTab(name){
-  ['master','qr','records'].forEach(n=>{
+  ['master','qr','records','stamp'].forEach(n=>{
     document.getElementById('p-'+n).classList.toggle('active', n===name);
     document.getElementById('t-'+n).classList.toggle('active', n===name);
   });
+  if(name==='stamp') loadStamps();
 }
 window.showTab = showTab;
 
@@ -366,16 +394,130 @@ function buildSheet(r){
    '<tr style="height:56px"><td class="lbl">参加者名</td><td colspan="7">'+membersCell+'</td></tr>'+
    '<tr style="height:40px"><td class="lbl">合計</td><td class="ctr">'+esc(r.total||'')+'</td>'+
      '<td class="ctr">名</td>'+
-     '<td colspan="2" class="lbl">元請確認欄</td><td colspan="3"></td></tr>'+
+     '<td colspan="2" class="lbl">元請確認欄</td><td colspan="3" style="text-align:center;vertical-align:middle;">'+(r.ownerStamp?'<img src="'+r.ownerStamp+'" style="height:52px;">':'')+'</td></tr>'+
    '</table>';
 }
 function openSheet(r){
+  currentSheetRecord = r;
   document.getElementById('sheetArea').innerHTML = buildSheet(r);
   document.getElementById('overlay').classList.add('show');
   window.scrollTo(0,0);
 }
 function closeSheet(){ document.getElementById('overlay').classList.remove('show'); }
 window.closeSheet=closeSheet;
+
+// ===== 印鑑機能 =====
+let currentSheetRecord = null;
+let stampsMap = {};   // id -> {name, dataURL}
+const SEL_KEY = 'ky_selected_stamp';
+
+async function loadStamps(){
+  const list = document.getElementById('stampList');
+  list.innerHTML = '<span class="muted">読み込み中…</span>';
+  let snap;
+  try{ snap = await getDocs(collection(db,'stamps')); }
+  catch(e){ list.innerHTML = '<span class="muted">読み込みエラー：'+esc(e.message)+'</span>'; return; }
+  stampsMap = {};
+  snap.docs.forEach(d=>{ stampsMap[d.id] = {name:d.data().name||'', dataURL:d.data().dataURL||''}; });
+  renderStamps();
+}
+function renderStamps(){
+  const list = document.getElementById('stampList');
+  const ids = Object.keys(stampsMap);
+  const sel = localStorage.getItem(SEL_KEY);
+  if(!ids.length){ list.innerHTML = '<span class="muted">まだ登録がありません。</span>'; return; }
+  list.innerHTML = '';
+  ids.forEach(id=>{
+    const st = stampsMap[id];
+    const isSel = (id===sel);
+    const card = document.createElement('div');
+    card.className = 'stampcard'+(isSel?' sel':'');
+    card.innerHTML =
+      '<img src="'+st.dataURL+'">'+
+      '<div class="snm">'+esc(st.name)+'</div>'+
+      '<button class="use'+(isSel?' sel':'')+'">'+(isSel?'使用中':'使用する')+'</button>'+
+      '<button class="del">削除</button>';
+    card.querySelector('.use').onclick=()=>selectStamp(id);
+    card.querySelector('.del').onclick=()=>delStamp(id);
+    list.appendChild(card);
+  });
+}
+function selectStamp(id){
+  localStorage.setItem(SEL_KEY, id);
+  renderStamps();
+}
+function currentStampData(){
+  const sel = localStorage.getItem(SEL_KEY);
+  return (sel && stampsMap[sel]) ? stampsMap[sel].dataURL : null;
+}
+// 画像を縮小（幅140px・透過維持PNG）
+function shrinkStamp(file){
+  return new Promise((resolve,reject)=>{
+    const fr = new FileReader();
+    fr.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const tw = 140, th = Math.max(1, Math.round(tw*img.height/img.width));
+        const c = document.createElement('canvas'); c.width=tw; c.height=th;
+        c.getContext('2d').drawImage(img,0,0,tw,th);
+        resolve(c.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = fr.result;
+    };
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+async function addStamp(){
+  const name = document.getElementById('newStampName').value.trim();
+  const fileEl = document.getElementById('newStampFile');
+  const msg = document.getElementById('stampMsg');
+  if(!name){ msg.textContent='印鑑名を入力してください。'; return; }
+  if(!fileEl.files || !fileEl.files[0]){ msg.textContent='画像ファイルを選んでください。'; return; }
+  msg.textContent='登録中…';
+  try{
+    const dataURL = await shrinkStamp(fileEl.files[0]);
+    await addDoc(collection(db,'stamps'), {name, dataURL, createdAt:serverTimestamp()});
+    document.getElementById('newStampName').value='';
+    fileEl.value='';
+    msg.textContent='登録しました。';
+    loadStamps();
+  }catch(e){ msg.textContent='登録エラー：'+e.message; }
+}
+async function delStamp(id){
+  if(!confirm('この印鑑を削除しますか？')) return;
+  try{
+    await deleteDoc(doc(db,'stamps',id));
+    if(localStorage.getItem(SEL_KEY)===id) localStorage.removeItem(SEL_KEY);
+    loadStamps();
+  }catch(e){ alert('削除エラー：'+e.message); }
+}
+// KY記録に押印
+async function stampRecord(){
+  if(!currentSheetRecord){ return; }
+  const data = currentStampData();
+  if(!data){ alert('使用する印鑑が選ばれていません。「印鑑」タブで登録・選択してください。'); return; }
+  currentSheetRecord.ownerStamp = data;
+  document.getElementById('sheetArea').innerHTML = buildSheet(currentSheetRecord);
+  try{ await updateDoc(doc(db,'ky',currentSheetRecord.id), {ownerStamp:data}); }
+  catch(e){ alert('押印の保存エラー：'+e.message); }
+}
+async function unstampRecord(){
+  if(!currentSheetRecord) return;
+  if(!currentSheetRecord.ownerStamp) return;
+  if(!confirm('押印を消しますか？')) return;
+  currentSheetRecord.ownerStamp = '';
+  document.getElementById('sheetArea').innerHTML = buildSheet(currentSheetRecord);
+  try{ await updateDoc(doc(db,'ky',currentSheetRecord.id), {ownerStamp:''}); }
+  catch(e){ alert('保存エラー：'+e.message); }
+}
+window.addStamp=addStamp;
+window.delStamp=delStamp;
+window.selectStamp=selectStamp;
+window.loadStamps=loadStamps;
+window.stampRecord=stampRecord;
+window.unstampRecord=unstampRecord;
 
 async function delRecord(r){
   if(!confirm('このKY記録を削除します。元に戻せません。よろしいですか？\n\n'+(r.date||'')+'  '+(r.siteName||'')+'  '+(r.partnerName||'')+'  '+(r.foreman||''))) return;
